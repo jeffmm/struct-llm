@@ -2,9 +2,11 @@
 name = "struct-llm-derive"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Jeff Moore <moore.jeffrey.m@gmail.com>"]
 description = "Derive macro for struct-llm"
-license = "MIT OR Apache-2.0"
+license = "MIT"
+repository = "https://github.com/jeffmm/struct-llm"
+homepage = "https://github.com/jeffmm/struct-llm"
 
 [lib]
 proc-macro = true
