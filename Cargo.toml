@@ -1,0 +1,32 @@
+[package]
+name = "struct-llm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Lightweight, WASM-compatible library for structured LLM outputs using tool-based approach"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/struct-llm"
+keywords = ["llm", "ai", "openai", "anthropic", "wasm"]
+categories = ["api-bindings", "wasm"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+# Optional derive macro (to be added later)
+# struct-llm-derive = { version = "0.1", path = "./struct-llm-derive", optional = true }
+
+[dev-dependencies]
+# For examples and tests - not part of the library
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+
+[features]
+default = []
+# derive = ["dep:struct-llm-derive"]  # To be enabled when macro is implemented
+
+# Examples will be added after derive macro is implemented
+# [[example]]
+# name = "basic"
+# required-features = ["derive"]
