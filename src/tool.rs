@@ -79,8 +79,8 @@ fn extract_openai_tool_calls(response: &str) -> Result<Vec<ToolCall>> {
         Some(calls) => calls
             .iter()
             .map(|tc| {
-                let arguments: serde_json::Value = serde_json::from_str(&tc.function.arguments)
-                    .unwrap_or(serde_json::json!({}));
+                let arguments: serde_json::Value =
+                    serde_json::from_str(&tc.function.arguments).unwrap_or(serde_json::json!({}));
 
                 ToolCall {
                     id: tc.id.clone(),
@@ -149,8 +149,9 @@ pub fn parse_tool_response<T: StructuredOutput>(tool_call: &ToolCall) -> Result<
         ));
     }
 
-    // TODO: Add JSON Schema validation here
-    // For now, we rely on serde's deserialization validation
+    // Validate arguments against the schema
+    let schema = T::json_schema();
+    crate::schema::validate(&tool_call.arguments, &schema)?;
 
     // Deserialize the arguments
     let result: T = serde_json::from_value(tool_call.arguments.clone())?;

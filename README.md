@@ -28,8 +28,11 @@ Instead of relying on provider-specific features like OpenAI's `response_format`
 
 ## Quick Start
 
+**See the [examples](./examples) directory for complete working examples!**
+
 ```rust
-use struct_llm::StructuredOutput;
+use struct_llm::{build_enforced_tool_request, extract_tool_calls, parse_tool_response,
+                 Message, Provider, StructuredOutput};
 use serde::{Deserialize, Serialize};
 
 // Define your output structure
@@ -44,13 +47,16 @@ struct SentimentAnalysis {
     reasoning: String,
 }
 
-// Generate JSON Schema and tool definition
+// Get tool definition and build request that ENFORCES the tool call
 let tool = SentimentAnalysis::tool_definition();
+let messages = vec![Message::user("Analyze: 'This library is amazing!'")];
+let mut request = build_enforced_tool_request(&messages, &tool, Provider::OpenAI);
+request["model"] = "gpt-4o-mini".into();
 
-// Your existing async code makes the HTTP request
+// Your async code makes the HTTP request
 let response = your_api_client
     .post("https://api.openai.com/v1/chat/completions")
-    .json(&request_with_tools(&prompt, &[tool]))
+    .json(&request)
     .send()
     .await?;
 
@@ -61,6 +67,8 @@ let result: SentimentAnalysis = parse_tool_response(&tool_calls[0])?;
 println!("Sentiment: {}", result.sentiment);
 println!("Confidence: {}", result.confidence);
 ```
+
+**Key insight:** `build_enforced_tool_request()` ensures the LLM *must* call your tool (like pydantic AI / luagent), guaranteeing you always get structured output back.
 
 ## Architecture
 

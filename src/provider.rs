@@ -45,6 +45,53 @@ pub fn build_request_with_tools(
     }
 }
 
+/// Build a request that enforces a specific tool call (like pydantic AI / luagent pattern)
+///
+/// This is the recommended approach for structured outputs - it guarantees the LLM
+/// will call the specified tool, ensuring you always get back your structured data.
+///
+/// # Example
+///
+/// ```ignore
+/// use struct_llm::{build_enforced_tool_request, Provider, StructuredOutput};
+///
+/// let tool = MyOutput::tool_definition();
+/// let request = build_enforced_tool_request(
+///     &messages,
+///     &tool,
+///     Provider::OpenAI
+/// );
+/// // The LLM will be forced to call MyOutput's tool
+/// ```
+pub fn build_enforced_tool_request(
+    messages: &[crate::Message],
+    tool: &crate::ToolDefinition,
+    provider: Provider,
+) -> serde_json::Value {
+    match provider {
+        Provider::OpenAI | Provider::Local => {
+            let mut request = build_openai_request(messages, &[tool.clone()]);
+            // Force this specific tool to be called
+            request["tool_choice"] = serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name
+                }
+            });
+            request
+        }
+        Provider::Anthropic => {
+            let mut request = build_anthropic_request(messages, &[tool.clone()]);
+            // Force this specific tool to be called
+            request["tool_choice"] = serde_json::json!({
+                "type": "tool",
+                "name": tool.name
+            });
+            request
+        }
+    }
+}
+
 fn build_openai_request(
     messages: &[crate::Message],
     tools: &[crate::ToolDefinition],

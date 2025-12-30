@@ -36,11 +36,18 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub mod error;
 pub mod provider;
 pub mod schema;
+pub mod streaming;
 pub mod tool;
 
 pub use error::{Error, Result};
-pub use provider::Provider;
+pub use provider::{build_enforced_tool_request, build_request_with_tools, Provider};
+pub use schema::validate as validate_schema;
+pub use streaming::{StreamParser, ToolDelta};
 pub use tool::{extract_tool_calls, parse_tool_response, ToolCall, ToolDefinition};
+
+// Re-export derive macro when feature is enabled
+#[cfg(feature = "derive")]
+pub use struct_llm_derive::StructuredOutput;
 
 /// Core trait for types that can be used as structured LLM outputs.
 ///
