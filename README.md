@@ -147,6 +147,62 @@ struct NPCData {
 }
 ```
 
+#### Nested Structs in Arrays
+
+When using `Vec<CustomStruct>` (arrays of custom types), **the inner struct must also derive `StructuredOutput`**. This allows the macro to generate the correct nested JSON schema.
+
+```rust
+// Inner struct MUST derive StructuredOutput
+#[derive(Debug, Clone, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "room_description",
+    description = "A room with description and lore"
+)]
+struct RoomDescription {
+    room_id: String,
+    full_description: String,
+    lore_entries: Vec<String>,  // Vec<primitive> works automatically
+}
+
+// Outer struct containing Vec<CustomStruct>
+#[derive(Debug, Clone, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "room_batch",
+    description = "Batch of room descriptions"
+)]
+struct RoomBatch {
+    rooms: Vec<RoomDescription>,  // Requires RoomDescription to derive StructuredOutput
+}
+```
+
+This generates the correct nested schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "room_id": { "type": "string" },
+          "full_description": { "type": "string" },
+          "lore_entries": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["room_id", "full_description", "lore_entries"]
+      }
+    }
+  },
+  "required": ["rooms"]
+}
+```
+
+**Supported array types:**
+- `Vec<String>`, `Vec<i32>`, `Vec<f64>`, etc. - Primitive arrays work automatically
+- `Vec<CustomStruct>` - Requires the inner struct to also derive `StructuredOutput`
+- Nested arrays like `Vec<Vec<String>>` are not currently supported
+
 ### 3. Provider Adapters
 
 Handle API-specific formatting differences:

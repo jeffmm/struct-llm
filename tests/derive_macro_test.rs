@@ -83,3 +83,119 @@ fn test_type_inference() {
     assert_eq!(properties["score"]["type"], "number");
     assert_eq!(properties["is_valid"]["type"], "boolean");
 }
+
+// Test for Vec<String> (primitive array)
+#[derive(Debug, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "list_output",
+    description = "Output with primitive arrays"
+)]
+struct ListOutput {
+    tags: Vec<String>,
+    scores: Vec<i32>,
+}
+
+#[test]
+fn test_primitive_vec() {
+    let schema = ListOutput::json_schema();
+    let properties = &schema["properties"];
+
+    // Check tags is array of strings
+    assert_eq!(properties["tags"]["type"], "array");
+    assert_eq!(properties["tags"]["items"]["type"], "string");
+
+    // Check scores is array of integers
+    assert_eq!(properties["scores"]["type"], "array");
+    assert_eq!(properties["scores"]["items"]["type"], "integer");
+}
+
+// Test for Vec<CustomStruct> (nested struct array)
+// Inner struct must also derive StructuredOutput
+#[derive(Debug, Clone, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "room_item",
+    description = "A single room with description and lore"
+)]
+struct RoomItem {
+    room_id: String,
+    description: String,
+    lore_entries: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "room_batch",
+    description = "A batch of rooms"
+)]
+struct RoomBatch {
+    rooms: Vec<RoomItem>,
+}
+
+#[test]
+fn test_nested_struct_vec() {
+    let schema = RoomBatch::json_schema();
+    let properties = &schema["properties"];
+
+    // Check rooms is array
+    assert_eq!(properties["rooms"]["type"], "array");
+
+    // Check items schema is an object (not string!)
+    let items_schema = &properties["rooms"]["items"];
+    assert_eq!(items_schema["type"], "object", "Vec<CustomStruct> should generate object schema, not string");
+
+    // Check nested properties exist
+    let nested_props = &items_schema["properties"];
+    assert_eq!(nested_props["room_id"]["type"], "string");
+    assert_eq!(nested_props["description"]["type"], "string");
+    assert_eq!(nested_props["lore_entries"]["type"], "array");
+    assert_eq!(nested_props["lore_entries"]["items"]["type"], "string");
+
+    // Check required fields in nested struct
+    let nested_required = items_schema["required"].as_array().unwrap();
+    assert_eq!(nested_required.len(), 3);
+}
+
+// Test matching the exact pattern from the issues document
+#[derive(Debug, Clone, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "loot_placement",
+    description = "Loot placement in a room"
+)]
+struct LootPlacement {
+    room_id: String,
+    loot_type: String,
+    rarity: String,
+    theme_hints: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "population_plan",
+    description = "Population plan for an area"
+)]
+struct PopulationPlan {
+    loot_placements: Vec<LootPlacement>,
+    boss_room_id: Option<String>,
+}
+
+#[test]
+fn test_complex_nested_struct() {
+    let schema = PopulationPlan::json_schema();
+    let properties = &schema["properties"];
+
+    // Check loot_placements is properly structured
+    assert_eq!(properties["loot_placements"]["type"], "array");
+
+    let items = &properties["loot_placements"]["items"];
+    assert_eq!(items["type"], "object", "Nested LootPlacement should be object");
+
+    let loot_props = &items["properties"];
+    assert_eq!(loot_props["room_id"]["type"], "string");
+    assert_eq!(loot_props["loot_type"]["type"], "string");
+    assert_eq!(loot_props["rarity"]["type"], "string");
+    assert_eq!(loot_props["theme_hints"]["type"], "array");
+    assert_eq!(loot_props["theme_hints"]["items"]["type"], "string");
+
+    // Print schema for debugging
+    println!("Generated schema: {}", serde_json::to_string_pretty(&schema).unwrap());
+}

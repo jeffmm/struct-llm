@@ -47,7 +47,7 @@ pub fn derive_structured_output(input: TokenStream) -> TokenStream {
             }
 
             fn json_schema() -> serde_json::Value {
-                serde_json::json!(#schema)
+                #schema
             }
         }
     };
@@ -100,18 +100,91 @@ fn generate_schema(data: &Data) -> proc_macro2::TokenStream {
     }
 }
 
+/// Generates a TokenStream that produces a serde_json::Value at runtime
+fn generate_field_schema_tokens(ty: &syn::Type) -> proc_macro2::TokenStream {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            let type_name = segment.ident.to_string();
+
+            // Handle Vec with generic argument
+            if type_name == "Vec" {
+                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
+                        // Check if inner type is a primitive
+                        if is_primitive_type(inner_ty) {
+                            let item_type = infer_json_type(inner_ty);
+                            return quote! {
+                                {
+                                    let mut items_schema = serde_json::Map::new();
+                                    items_schema.insert("type".to_string(), serde_json::Value::String(#item_type.to_string()));
+
+                                    let mut schema = serde_json::Map::new();
+                                    schema.insert("type".to_string(), serde_json::Value::String("array".to_string()));
+                                    schema.insert("items".to_string(), serde_json::Value::Object(items_schema));
+                                    serde_json::Value::Object(schema)
+                                }
+                            };
+                        } else {
+                            // For custom types (structs), call their json_schema() at runtime
+                            // This requires the inner type to implement StructuredOutput
+                            return quote! {
+                                {
+                                    let inner_schema = <#inner_ty as struct_llm::StructuredOutput>::json_schema();
+                                    let mut schema = serde_json::Map::new();
+                                    schema.insert("type".to_string(), serde_json::Value::String("array".to_string()));
+                                    schema.insert("items".to_string(), inner_schema);
+                                    serde_json::Value::Object(schema)
+                                }
+                            };
+                        }
+                    }
+                }
+                // Fallback for Vec without type info
+                return quote! {
+                    {
+                        let mut schema = serde_json::Map::new();
+                        schema.insert("type".to_string(), serde_json::Value::String("array".to_string()));
+                        schema.insert("items".to_string(), serde_json::Value::Object(serde_json::Map::new()));
+                        serde_json::Value::Object(schema)
+                    }
+                };
+            }
+
+            // Handle Option
+            if type_name == "Option" {
+                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                    if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
+                        // Return the inner type schema (Option makes field non-required)
+                        return generate_field_schema_tokens(inner_ty);
+                    }
+                }
+            }
+        }
+    }
+
+    // Default case: simple type
+    let type_str = infer_json_type(ty);
+    quote! {
+        {
+            let mut schema = serde_json::Map::new();
+            schema.insert("type".to_string(), serde_json::Value::String(#type_str.to_string()));
+            serde_json::Value::Object(schema)
+        }
+    }
+}
+
 fn generate_struct_schema(fields: &Fields) -> proc_macro2::TokenStream {
-    let mut properties = Vec::new();
+    let mut field_insertions = Vec::new();
     let mut required = Vec::new();
 
     match fields {
         Fields::Named(fields_named) => {
             for field in &fields_named.named {
                 let field_name = field.ident.as_ref().unwrap().to_string();
-                let field_schema = generate_field_schema(&field.ty);
+                let field_schema = generate_field_schema_tokens(&field.ty);
 
-                properties.push(quote! {
-                    #field_name: #field_schema
+                field_insertions.push(quote! {
+                    properties.insert(#field_name.to_string(), #field_schema);
                 });
 
                 required.push(field_name);
@@ -125,66 +198,43 @@ fn generate_struct_schema(fields: &Fields) -> proc_macro2::TokenStream {
         }
     }
 
-    let required_fields = required.iter().map(|s| quote! { #s });
-
     quote! {
         {
-            "type": "object",
-            "properties": {
-                #(#properties),*
-            },
-            "required": [#(#required_fields),*]
+            let mut properties = serde_json::Map::new();
+            #(#field_insertions)*
+
+            let required_fields: Vec<serde_json::Value> = vec![
+                #(serde_json::Value::String(#required.to_string())),*
+            ];
+
+            let mut schema = serde_json::Map::new();
+            schema.insert("type".to_string(), serde_json::Value::String("object".to_string()));
+            schema.insert("properties".to_string(), serde_json::Value::Object(properties));
+            schema.insert("required".to_string(), serde_json::Value::Array(required_fields));
+            serde_json::Value::Object(schema)
         }
     }
 }
 
-fn generate_field_schema(ty: &syn::Type) -> proc_macro2::TokenStream {
+/// Check if a type is a known primitive that maps directly to a JSON type
+fn is_primitive_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
         if let Some(segment) = type_path.path.segments.last() {
             let type_name = segment.ident.to_string();
-
-            // Handle Vec with generic argument
-            if type_name == "Vec" {
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
-                        let item_type = infer_json_type(inner_ty);
-                        return quote! {
-                            {
-                                "type": "array",
-                                "items": {
-                                    "type": #item_type
-                                }
-                            }
-                        };
-                    }
-                }
-                // Fallback for Vec without type info
-                return quote! {
-                    {
-                        "type": "array",
-                        "items": {}
-                    }
-                };
-            }
-
-            // Handle Option
-            if type_name == "Option" {
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
-                        // Return the inner type schema (Option makes field non-required)
-                        return generate_field_schema(inner_ty);
-                    }
-                }
-            }
+            matches!(
+                type_name.as_str(),
+                "String" | "str" |
+                "i8" | "i16" | "i32" | "i64" | "i128" |
+                "u8" | "u16" | "u32" | "u64" | "u128" |
+                "isize" | "usize" |
+                "f32" | "f64" |
+                "bool"
+            )
+        } else {
+            false
         }
-    }
-
-    // Default case: simple type
-    let type_str = infer_json_type(ty);
-    quote! {
-        {
-            "type": #type_str
-        }
+    } else {
+        false
     }
 }
 
