@@ -16,7 +16,7 @@ serde_json = "1.0"
 thiserror = "2.0"
 
 # Derive macro
-struct-llm-derive = { version = "0.1", path = "./struct-llm-derive", optional = true }
+struct-llm-derive = { version = "0.2", path = "./struct-llm-derive", optional = true }
 
 [dev-dependencies]
 # For examples and tests - not part of the library
