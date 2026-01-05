@@ -199,3 +199,59 @@ fn test_complex_nested_struct() {
     // Print schema for debugging
     println!("Generated schema: {}", serde_json::to_string_pretty(&schema).unwrap());
 }
+
+// Test for optional types to verify they are not added to required fields
+#[derive(Debug, Serialize, Deserialize, StructuredOutput)]
+#[structured_output(
+    name = "optional_types",
+    description = "Test various optional field types"
+)]
+struct OptionalTypes {
+    required_field: String,
+    optional_string: Option<String>,
+    optional_integer: Option<i32>,
+    optional_number: Option<f64>,
+    optional_boolean: Option<bool>,
+    optional_vec: Option<Vec<String>>,
+}
+
+#[test]
+fn test_optional_types() {
+    let schema = OptionalTypes::json_schema();
+    let properties = &schema["properties"];
+    let required = schema["required"].as_array().unwrap();
+
+    // Verify only required_field is in the required list
+    assert_eq!(
+        required.len(),
+        1,
+        "Only one field should be required, but found: {:?}",
+        required
+    );
+    assert_eq!(required[0], "required_field");
+
+    // Verify optional fields are NOT in the required list
+    let required_names: Vec<String> = required.iter().map(|v| v.as_str().unwrap().to_string()).collect();
+    assert!(!required_names.contains(&"optional_string".to_string()));
+    assert!(!required_names.contains(&"optional_integer".to_string()));
+    assert!(!required_names.contains(&"optional_number".to_string()));
+    assert!(!required_names.contains(&"optional_boolean".to_string()));
+    assert!(!required_names.contains(&"optional_vec".to_string()));
+
+    // Verify optional fields have correct schema types (unwrapped from Option)
+    assert_eq!(properties["optional_string"]["type"], "string");
+    assert_eq!(properties["optional_integer"]["type"], "integer");
+    assert_eq!(properties["optional_number"]["type"], "number");
+    assert_eq!(properties["optional_boolean"]["type"], "boolean");
+    assert_eq!(properties["optional_vec"]["type"], "array");
+    assert_eq!(properties["optional_vec"]["items"]["type"], "string");
+
+    // Verify all properties exist in the schema
+    assert!(properties.is_object());
+    assert!(properties["required_field"].is_object());
+    assert!(properties["optional_string"].is_object());
+    assert!(properties["optional_integer"].is_object());
+    assert!(properties["optional_number"].is_object());
+    assert!(properties["optional_boolean"].is_object());
+    assert!(properties["optional_vec"].is_object());
+}
