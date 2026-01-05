@@ -187,7 +187,10 @@ fn generate_struct_schema(fields: &Fields) -> proc_macro2::TokenStream {
                     properties.insert(#field_name.to_string(), #field_schema);
                 });
 
-                required.push(field_name);
+                // Only add to required if NOT an Option type
+                if !is_option_type(&field.ty) {
+                    required.push(field_name);
+                }
             }
         }
         Fields::Unnamed(_) => {
@@ -230,6 +233,19 @@ fn is_primitive_type(ty: &syn::Type) -> bool {
                 "f32" | "f64" |
                 "bool"
             )
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+/// Check if a type is Option<T>
+fn is_option_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            segment.ident == "Option"
         } else {
             false
         }
